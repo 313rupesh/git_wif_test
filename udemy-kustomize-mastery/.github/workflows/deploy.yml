@@ -1,10 +1,8 @@
 name: Prepare Manifests and Deploy to GKE
 
 on:
-  # push:
-  #   branches: [ "main" ]
-  repository_dispatch:
-    types: [deploy]
+  push:
+    branches: [ "master" ]
 
 env:
   PROJECT_ID: ${{ secrets.GKE_PROJECT }}
@@ -35,8 +33,25 @@ jobs:
         workload_identity_provider:  ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_ID }}
         service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-    - id: 'gcloud'
-      name: 'gcloud'
+    # Get the GKE credentials so we can deploy to the cluster
+    - name: Set up GKE credentials
+      uses: google-github-actions/get-gke-credentials@v0
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+
+    # Download and setup latest kubectl version 
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    # Deploy to the GKE cluster
+    - name: Deploy to GKE
       run: |-
-          gcloud auth login --brief --cred-file="${{ steps.auth.outputs.credentials_file_path }}"
-          gcloud services list
+        kubectl kustomize code-samples/6-multiple-envs/day2/dev/ > deploy.yml
+        echo "Kustomize output:"
+        cat deploy.yml
+        
+        kubectl apply -f deploy.yml
+        kubectl get services -n $ENVIRONMENT -o wide
